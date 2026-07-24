@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,10 +16,16 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const profileSnap = await getDoc(doc(db, "profiles", cred.user.uid));
+      const role = profileSnap.exists() ? profileSnap.data().role : null;
+      if (role === "facilitator" || role === "venue") {
+        router.push("/network");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
-      setError("Login failed. Check your email and password.");
+      setError(`Login failed: ${err.code || err.message}`);
     }
   }
 

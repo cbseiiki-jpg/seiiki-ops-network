@@ -6,6 +6,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   addDoc,
+  doc,
+  getDoc,
   query,
   where,
   getDocs,
@@ -18,6 +20,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState(null);
   const [retreats, setRetreats] = useState([]);
+  const [error, setError] = useState("");
 
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -48,9 +51,9 @@ export default function DashboardPage() {
     return newOrg.id;
   }
 
-  async function loadRetreats(orgIdToLoad) {
-    if (!orgIdToLoad) return;
-    const q = query(collection(db, "retreats"), where("org_id", "==", orgIdToLoad));
+  async function loadRetreats(ownerUid) {
+    if (!ownerUid) return;
+    const q = query(collection(db, "retreats"), where("owner_id", "==", ownerUid));
     const snap = await getDocs(q);
     setRetreats(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
@@ -62,8 +65,18 @@ export default function DashboardPage() {
         return;
       }
       setUser(firebaseUser);
-      const foundOrgId = await ensureOrganization(firebaseUser.uid);
-      await loadRetreats(foundOrgId);
+      try {
+        const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
+        const role = profileSnap.exists() ? profileSnap.data().role : null;
+        if (role === "facilitator" || role === "venue") {
+          router.push("/network");
+          return;
+        }
+        await ensureOrganization(firebaseUser.uid);
+        await loadRetreats(firebaseUser.uid);
+      } catch (err) {
+        setError(`Could not load your data: ${err.code || err.message}`);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -72,32 +85,40 @@ export default function DashboardPage() {
 
   async function handleCreateRetreat(e) {
     e.preventDefault();
-    await addDoc(collection(db, "retreats"), {
-      org_id: orgId,
-      owner_id: user.uid,
-      title,
-      location,
-      status: "planning",
-      visibility: "private",
-      created_at: serverTimestamp(),
-    });
-    setTitle("");
-    setLocation("");
-    await loadRetreats(orgId);
+    try {
+      await addDoc(collection(db, "retreats"), {
+        org_id: orgId,
+        owner_id: user.uid,
+        title,
+        location,
+        status: "planning",
+        visibility: "private",
+        created_at: serverTimestamp(),
+      });
+      setTitle("");
+      setLocation("");
+      await loadRetreats(user.uid);
+    } catch (err) {
+      setError(`Could not create retreat: ${err.code || err.message}`);
+    }
   }
 
   async function handleCreateNeed(e) {
     e.preventDefault();
-    await addDoc(collection(db, "needs"), {
-      retreat_id: needRetreatId,
-      owner_id: user.uid,
-      type: needType,
-      description: needDescription,
-      visibility: "network_visible",
-      status: "open",
-      created_at: serverTimestamp(),
-    });
-    setNeedDescription("");
+    try {
+      await addDoc(collection(db, "needs"), {
+        retreat_id: needRetreatId,
+        owner_id: user.uid,
+        type: needType,
+        description: needDescription,
+        visibility: "network_visible",
+        status: "open",
+        created_at: serverTimestamp(),
+      });
+      setNeedDescription("");
+    } catch (err) {
+      setError(`Could not post need: ${err.code || err.message}`);
+    }
   }
 
   async function handleLogout() {
@@ -111,6 +132,7 @@ export default function DashboardPage() {
     <main style={{ padding: 40 }}>
       <h1>Organiser Dashboard</h1>
       <button onClick={handleLogout}>Log out</button>
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
       <h2>Create a retreat</h2>
       <form onSubmit={handleCreateRetreat}>

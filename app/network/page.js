@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
+  doc,
+  getDoc,
   query,
   where,
   getDocs,
@@ -17,6 +19,7 @@ export default function NetworkPage() {
   const [user, setUser] = useState(null);
   const [needs, setNeeds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const router = useRouter();
 
   async function loadNeeds() {
@@ -35,7 +38,17 @@ export default function NetworkPage() {
         return;
       }
       setUser(firebaseUser);
-      await loadNeeds();
+      try {
+        const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
+        const role = profileSnap.exists() ? profileSnap.data().role : null;
+        if (role === "organizer" || role === "admin") {
+          router.push("/dashboard");
+          return;
+        }
+        await loadNeeds();
+      } catch (err) {
+        setError(`Could not load needs: ${err.code || err.message}`);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -43,15 +56,19 @@ export default function NetworkPage() {
   }, []);
 
   async function handleRespond(needId, needOwnerId) {
-    await addDoc(collection(db, "need_responses"), {
-      need_id: needId,
-      need_owner_id: needOwnerId,
-      responder_id: user.uid,
-      message: "Interested — please share more details.",
-      status: "interested",
-      created_at: serverTimestamp(),
-    });
-    alert("Response sent.");
+    try {
+      await addDoc(collection(db, "need_responses"), {
+        need_id: needId,
+        need_owner_id: needOwnerId,
+        responder_id: user.uid,
+        message: "Interested — please share more details.",
+        status: "interested",
+        created_at: serverTimestamp(),
+      });
+      alert("Response sent.");
+    } catch (err) {
+      setError(`Could not send response: ${err.code || err.message}`);
+    }
   }
 
   if (loading) return <p style={{ padding: 40 }}>Loading...</p>;
@@ -59,6 +76,7 @@ export default function NetworkPage() {
   return (
     <main style={{ padding: 40 }}>
       <h1>Network — Open Needs</h1>
+      {error && <p style={{ color: "red" }}>{error}</p>}
       <ul>
         {needs.map((n) => (
           <li key={n.id} style={{ marginBottom: 16 }}>
