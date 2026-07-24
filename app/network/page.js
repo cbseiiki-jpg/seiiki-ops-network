@@ -1,0 +1,73 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+
+export default function NetworkPage() {
+  const [user, setUser] = useState(null);
+  const [needs, setNeeds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  async function loadNeeds() {
+    const q = query(
+      collection(db, "needs"),
+      where("visibility", "==", "network_visible")
+    );
+    const snap = await getDocs(q);
+    setNeeds(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        router.push("/login");
+        return;
+      }
+      setUser(firebaseUser);
+      await loadNeeds();
+      setLoading(false);
+    });
+    return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleRespond(needId, needOwnerId) {
+    await addDoc(collection(db, "need_responses"), {
+      need_id: needId,
+      need_owner_id: needOwnerId,
+      responder_id: user.uid,
+      message: "Interested — please share more details.",
+      status: "interested",
+      created_at: serverTimestamp(),
+    });
+    alert("Response sent.");
+  }
+
+  if (loading) return <p style={{ padding: 40 }}>Loading...</p>;
+
+  return (
+    <main style={{ padding: 40 }}>
+      <h1>Network — Open Needs</h1>
+      <ul>
+        {needs.map((n) => (
+          <li key={n.id} style={{ marginBottom: 16 }}>
+            <strong>{n.type}</strong>: {n.description}
+            <br />
+            <button onClick={() => handleRespond(n.id, n.owner_id)}>Respond</button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
