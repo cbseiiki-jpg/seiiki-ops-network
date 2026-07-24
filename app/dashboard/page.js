@@ -17,6 +17,7 @@ import { auth, db } from "@/lib/firebase";
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState(null);
   const [retreats, setRetreats] = useState([]);
@@ -67,8 +68,9 @@ export default function DashboardPage() {
       setUser(firebaseUser);
       try {
         const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
-        const role = profileSnap.exists() ? profileSnap.data().role : null;
-        if (role === "facilitator" || role === "venue") {
+        const fetchedRole = profileSnap.exists() ? profileSnap.data().role : null;
+        setRole(fetchedRole);
+        if (fetchedRole === "facilitator" || fetchedRole === "venue") {
           router.push("/network");
           return;
         }
@@ -131,6 +133,9 @@ export default function DashboardPage() {
   return (
     <main style={{ padding: 40 }}>
       <h1>Organiser Dashboard</h1>
+      <p style={{ fontSize: 12, color: "#666" }}>
+        Signed in as {user?.email} — role on file: {JSON.stringify(role)}
+      </p>
       <button onClick={handleLogout}>Log out</button>
       {error && <p style={{ color: "red" }}>{error}</p>}
 

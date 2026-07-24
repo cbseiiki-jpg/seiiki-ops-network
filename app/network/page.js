@@ -17,6 +17,7 @@ import { auth, db } from "@/lib/firebase";
 
 export default function NetworkPage() {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(undefined);
   const [needs, setNeeds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -40,8 +41,9 @@ export default function NetworkPage() {
       setUser(firebaseUser);
       try {
         const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
-        const role = profileSnap.exists() ? profileSnap.data().role : null;
-        if (role === "organizer" || role === "admin") {
+        const fetchedRole = profileSnap.exists() ? profileSnap.data().role : null;
+        setRole(fetchedRole);
+        if (fetchedRole === "organizer" || fetchedRole === "admin") {
           router.push("/dashboard");
           return;
         }
@@ -76,6 +78,9 @@ export default function NetworkPage() {
   return (
     <main style={{ padding: 40 }}>
       <h1>Network — Open Needs</h1>
+      <p style={{ fontSize: 12, color: "#666" }}>
+        Signed in as {user?.email} — role on file: {JSON.stringify(role)}
+      </p>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <ul>
         {needs.map((n) => (
