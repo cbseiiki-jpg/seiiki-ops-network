@@ -22,6 +22,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState(null);
   const [retreats, setRetreats] = useState([]);
+  const [myNeeds, setMyNeeds] = useState([]);
+  const [responses, setResponses] = useState([]);
   const [error, setError] = useState("");
 
   const [title, setTitle] = useState("");
@@ -60,6 +62,20 @@ export default function DashboardPage() {
     setRetreats(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 
+  async function loadMyNeeds(ownerUid) {
+    if (!ownerUid) return;
+    const q = query(collection(db, "needs"), where("owner_id", "==", ownerUid));
+    const snap = await getDocs(q);
+    setMyNeeds(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+
+  async function loadResponses(ownerUid) {
+    if (!ownerUid) return;
+    const q = query(collection(db, "need_responses"), where("need_owner_id", "==", ownerUid));
+    const snap = await getDocs(q);
+    setResponses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -82,6 +98,8 @@ export default function DashboardPage() {
         }
         await ensureOrganization(firebaseUser.uid);
         await loadRetreats(firebaseUser.uid);
+        await loadMyNeeds(firebaseUser.uid);
+        await loadResponses(firebaseUser.uid);
       } catch (err) {
         setError(`Could not load your data: ${err.code || err.message}`);
       }
@@ -124,9 +142,14 @@ export default function DashboardPage() {
         created_at: serverTimestamp(),
       });
       setNeedDescription("");
+      await loadMyNeeds(user.uid);
     } catch (err) {
       setError(`Could not post need: ${err.code || err.message}`);
     }
+  }
+
+  function responsesFor(needId) {
+    return responses.filter((r) => r.need_id === needId);
   }
 
   async function handleLogout() {
@@ -177,6 +200,26 @@ export default function DashboardPage() {
         <textarea placeholder="Describe what you need" value={needDescription} onChange={(e) => setNeedDescription(e.target.value)} required /><br /><br />
         <button type="submit">Post need</button>
       </form>
+
+      <h2>Your needs</h2>
+      <ul>
+        {myNeeds.length === 0 && <li>None posted yet.</li>}
+        {myNeeds.map((n) => (
+          <li key={n.id} style={{ marginBottom: 16 }}>
+            <strong>{n.type}</strong>: {n.description} — status: {n.status}
+            <ul>
+              {responsesFor(n.id).length === 0 && (
+                <li style={{ color: "#666" }}>No responses yet.</li>
+              )}
+              {responsesFor(n.id).map((r) => (
+                <li key={r.id}>
+                  {r.responder_name || r.responder_id}: {r.message}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }

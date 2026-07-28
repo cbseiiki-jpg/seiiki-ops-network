@@ -20,6 +20,7 @@ export default function NetworkPage() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(undefined);
   const [needs, setNeeds] = useState([]);
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -48,6 +49,7 @@ export default function NetworkPage() {
         }
         const fetchedRole = normalizeRole(profileSnap.data().role);
         setRole(fetchedRole);
+        setFullName(profileSnap.data().full_name || "");
         if (fetchedRole !== "facilitator" && fetchedRole !== "venue") {
           // This page is facilitator/venue-only — everyone else belongs somewhere else.
           router.push(destinationFor(fetchedRole) || "/setup-profile");
@@ -74,6 +76,7 @@ export default function NetworkPage() {
         need_id: needId,
         need_owner_id: needOwnerId,
         responder_id: user.uid,
+        responder_name: fullName || user?.email || "Someone",
         message: "Interested — please share more details.",
         status: "interested",
         created_at: serverTimestamp(),
@@ -95,6 +98,7 @@ export default function NetworkPage() {
       <button onClick={handleLogout}>Log out</button>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <ul>
+        {needs.length === 0 && <li>No open needs right now.</li>}
         {needs.map((n) => (
           <li key={n.id} style={{ marginBottom: 16 }}>
             <strong>{n.type}</strong>: {n.description}
