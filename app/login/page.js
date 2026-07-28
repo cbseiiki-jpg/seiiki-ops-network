@@ -23,7 +23,9 @@ export default function LoginPage() {
         return;
       }
       const role = profileSnap.data().role;
-      if (role === "facilitator" || role === "venue") {
+      if (role === "admin") {
+        router.push("/admin");
+      } else if (role === "facilitator" || role === "venue") {
         router.push("/network");
       } else {
         router.push("/dashboard");

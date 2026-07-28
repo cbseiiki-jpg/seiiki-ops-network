@@ -47,7 +47,11 @@ export default function NetworkPage() {
         }
         const fetchedRole = profileSnap.data().role;
         setRole(fetchedRole);
-        if (fetchedRole === "organizer" || fetchedRole === "admin") {
+        if (fetchedRole === "admin") {
+          router.push("/admin");
+          return;
+        }
+        if (fetchedRole === "organizer") {
           router.push("/dashboard");
           return;
         }

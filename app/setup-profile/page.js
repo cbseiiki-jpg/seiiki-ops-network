@@ -32,7 +32,9 @@ export default function SetupProfilePage() {
         if (profileSnap.exists()) {
           // Already set up — this account doesn't need this page.
           const existingRole = profileSnap.data().role;
-          if (existingRole === "facilitator" || existingRole === "venue") {
+          if (existingRole === "admin") {
+            router.push("/admin");
+          } else if (existingRole === "facilitator" || existingRole === "venue") {
             router.push("/network");
           } else {
             router.push("/dashboard");
@@ -42,11 +44,12 @@ export default function SetupProfilePage() {
         if (ADMIN_EMAILS.includes(firebaseUser.email)) {
           // Known admin address — skip the picker, self-provision as admin.
           await setDoc(doc(db, "profiles", firebaseUser.uid), {
-            full_name: firebaseUser.email,
+            full_name: "Admin",
+            email: firebaseUser.email,
             role: "admin",
             created_at: serverTimestamp(),
           });
-          router.push("/dashboard");
+          router.push("/admin");
           return;
         }
       } catch (err) {
@@ -67,6 +70,7 @@ export default function SetupProfilePage() {
       // so it can never drift from the Authentication UID.
       await setDoc(doc(db, "profiles", user.uid), {
         full_name: fullName,
+        email: user.email,
         role,
         created_at: serverTimestamp(),
       });
