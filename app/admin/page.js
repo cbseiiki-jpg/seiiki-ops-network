@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 
@@ -15,6 +22,15 @@ const ROLE_LABELS = {
 };
 const ROLE_ORDER = ["admin", "organiser", "facilitator", "venue"];
 
+function generateInviteCode() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — avoids mistyping
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,6 +38,12 @@ export default function AdminPage() {
   const [members, setMembers] = useState([]);
   const [retreats, setRetreats] = useState([]);
   const [needs, setNeeds] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [inviteRole, setInviteRole] = useState("organiser");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [lastInvite, setLastInvite] = useState(null); // { code, link }
+  const [copied, setCopied] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -52,6 +74,9 @@ export default function AdminPage() {
 
         const needsSnap = await getDocs(collection(db, "needs"));
         setNeeds(needsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+        const invitesSnap = await getDocs(collection(db, "invites"));
+        setInvites(invitesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         setError(`Could not load admin data: ${err.code || err.message}`);
       }
@@ -66,6 +91,35 @@ export default function AdminPage() {
   async function handleLogout() {
     await signOut(auth);
     router.push("/login");
+  }
+
+  async function handleGenerateInvite(e) {
+    e.preventDefault();
+    setInviteError("");
+    setCopied(false);
+    setGeneratingInvite(true);
+    try {
+      const code = generateInviteCode();
+      await setDoc(doc(db, "invites", code), {
+        role: inviteRole,
+        created_by: user.uid,
+        created_at: serverTimestamp(),
+        used: false,
+        used_by: null,
+      });
+      setLastInvite({ code, link: `${window.location.origin}/signup?code=${code}` });
+      const invitesSnap = await getDocs(collection(db, "invites"));
+      setInvites(invitesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      setInviteError(`Could not create invite: ${err.code || err.message}`);
+    }
+    setGeneratingInvite(false);
+  }
+
+  function handleCopyLink() {
+    if (!lastInvite) return;
+    navigator.clipboard.writeText(lastInvite.link);
+    setCopied(true);
   }
 
   function nameFor(uid) {
@@ -87,6 +141,35 @@ export default function AdminPage() {
           see Step 20 in the build guide.
         </p>
       )}
+
+      <h2>Invite someone</h2>
+      <form onSubmit={handleGenerateInvite}>
+        <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+          <option value="organiser">Organiser</option>
+          <option value="facilitator">Facilitator</option>
+          <option value="venue">Venue</option>
+        </select>{" "}
+        <button type="submit" disabled={generatingInvite}>
+          {generatingInvite ? "Generating..." : "Generate invite code"}
+        </button>
+      </form>
+      {inviteError && <p style={{ color: "red" }}>{inviteError}</p>}
+      {lastInvite && (
+        <p>
+          Send this link: <code>{lastInvite.link}</code>{" "}
+          <button onClick={handleCopyLink}>{copied ? "Copied" : "Copy"}</button>
+        </p>
+      )}
+      <h3 style={{ fontSize: 14 }}>Invites sent ({invites.length})</h3>
+      <ul>
+        {invites.length === 0 && <li>None yet.</li>}
+        {invites.map((inv) => (
+          <li key={inv.id}>
+            {inv.id} — {ROLE_LABELS[inv.role] || inv.role} —{" "}
+            {inv.used ? `used by ${nameFor(inv.used_by)}` : "not used yet"}
+          </li>
+        ))}
+      </ul>
 
       <h2>Members ({members.length})</h2>
       {ROLE_ORDER.map((r) => {
