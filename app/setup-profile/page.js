@@ -6,6 +6,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
+// Accounts in this list skip the role picker entirely and self-provision as
+// admin. Add more addresses here (comma-separated) if you ever need a second
+// admin account.
+const ADMIN_EMAILS = ["batinseiiki@gmail.com"];
+
 export default function SetupProfilePage() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
@@ -32,6 +37,16 @@ export default function SetupProfilePage() {
           } else {
             router.push("/dashboard");
           }
+          return;
+        }
+        if (ADMIN_EMAILS.includes(firebaseUser.email)) {
+          // Known admin address — skip the picker, self-provision as admin.
+          await setDoc(doc(db, "profiles", firebaseUser.uid), {
+            full_name: firebaseUser.email,
+            role: "admin",
+            created_at: serverTimestamp(),
+          });
+          router.push("/dashboard");
           return;
         }
       } catch (err) {
