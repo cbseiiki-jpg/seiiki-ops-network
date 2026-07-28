@@ -14,6 +14,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
@@ -72,14 +73,11 @@ export default function DashboardPage() {
           router.push("/setup-profile");
           return;
         }
-        const fetchedRole = profileSnap.data().role;
+        const fetchedRole = normalizeRole(profileSnap.data().role);
         setRole(fetchedRole);
-        if (fetchedRole === "admin") {
-          router.push("/admin");
-          return;
-        }
-        if (fetchedRole === "facilitator" || fetchedRole === "venue") {
-          router.push("/network");
+        if (fetchedRole !== "organiser") {
+          // This page is organiser-only — everyone else belongs somewhere else.
+          router.push(destinationFor(fetchedRole) || "/setup-profile");
           return;
         }
         await ensureOrganization(firebaseUser.uid);

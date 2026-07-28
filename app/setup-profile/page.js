@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { destinationFor } from "@/lib/roleRouting";
 
 // Accounts in this list skip the role picker entirely and self-provision as
 // admin. Add more addresses here (comma-separated) if you ever need a second
@@ -15,7 +16,7 @@ export default function SetupProfilePage() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState("organizer");
+  const [role, setRole] = useState("organiser");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -30,16 +31,14 @@ export default function SetupProfilePage() {
       try {
         const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
         if (profileSnap.exists()) {
-          // Already set up — this account doesn't need this page.
-          const existingRole = profileSnap.data().role;
-          if (existingRole === "admin") {
-            router.push("/admin");
-          } else if (existingRole === "facilitator" || existingRole === "venue") {
-            router.push("/network");
-          } else {
-            router.push("/dashboard");
+          const destination = destinationFor(profileSnap.data().role);
+          if (destination) {
+            router.push(destination);
+            return;
           }
-          return;
+          // Existing profile, but its role doesn't match anything recognised
+          // (old data, a typo, different casing) — fall through and show the
+          // picker below so this account fixes itself, instead of guessing.
         }
         if (ADMIN_EMAILS.includes(firebaseUser.email)) {
           // Known admin address — skip the picker, self-provision as admin.
@@ -74,11 +73,7 @@ export default function SetupProfilePage() {
         role,
         created_at: serverTimestamp(),
       });
-      if (role === "facilitator" || role === "venue") {
-        router.push("/network");
-      } else {
-        router.push("/dashboard");
-      }
+      router.push(destinationFor(role) || "/dashboard");
     } catch (err) {
       setError(`Could not save your profile: ${err.code || err.message}`);
       setSaving(false);
@@ -100,7 +95,7 @@ export default function SetupProfilePage() {
           required
         /><br /><br />
         <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="organizer">Organiser</option>
+          <option value="organiser">Organiser</option>
           <option value="facilitator">Facilitator</option>
           <option value="venue">Venue</option>
         </select><br /><br />

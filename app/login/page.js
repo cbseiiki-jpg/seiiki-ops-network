@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { destinationFor } from "@/lib/roleRouting";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,14 +23,8 @@ export default function LoginPage() {
         router.push("/setup-profile");
         return;
       }
-      const role = profileSnap.data().role;
-      if (role === "admin") {
-        router.push("/admin");
-      } else if (role === "facilitator" || role === "venue") {
-        router.push("/network");
-      } else {
-        router.push("/dashboard");
-      }
+      const destination = destinationFor(profileSnap.data().role);
+      router.push(destination || "/setup-profile");
     } catch (err) {
       setError(`Login failed: ${err.code || err.message}`);
     }

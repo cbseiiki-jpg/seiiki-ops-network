@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 
 const ROLE_LABELS = {
   admin: "Admin",
-  organizer: "Organiser",
+  organiser: "Organiser",
   facilitator: "Facilitator",
   venue: "Venue",
 };
-const ROLE_ORDER = ["admin", "organizer", "facilitator", "venue"];
+const ROLE_ORDER = ["admin", "organiser", "facilitator", "venue"];
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
@@ -32,17 +33,11 @@ export default function AdminPage() {
       setUser(firebaseUser);
       try {
         const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
-        const role = profileSnap.exists() ? profileSnap.data().role : null;
+        const role = normalizeRole(profileSnap.exists() ? profileSnap.data().role : null);
 
         if (role !== "admin") {
           // Not an admin — send them to wherever they actually belong.
-          if (role === "facilitator" || role === "venue") {
-            router.push("/network");
-          } else if (role === "organizer") {
-            router.push("/dashboard");
-          } else {
-            router.push("/setup-profile");
-          }
+          router.push(destinationFor(role) || "/setup-profile");
           return;
         }
 
@@ -68,6 +63,11 @@ export default function AdminPage() {
 
   if (loading) return <p style={{ padding: 40 }}>Loading...</p>;
 
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/login");
+  }
+
   function nameFor(uid) {
     const member = members.find((m) => m.id === uid);
     return member ? member.full_name : uid;
@@ -77,6 +77,7 @@ export default function AdminPage() {
     <main style={{ padding: 40 }}>
       <h1>Admin Overview</h1>
       <p style={{ fontSize: 12, color: "#666" }}>Signed in as {user?.email}</p>
+      <button onClick={handleLogout}>Log out</button>
       {error && (
         <p style={{ color: "red" }}>
           {error}

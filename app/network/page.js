@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   doc,
@@ -14,6 +14,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 
 export default function NetworkPage() {
   const [user, setUser] = useState(null);
@@ -45,14 +46,11 @@ export default function NetworkPage() {
           router.push("/setup-profile");
           return;
         }
-        const fetchedRole = profileSnap.data().role;
+        const fetchedRole = normalizeRole(profileSnap.data().role);
         setRole(fetchedRole);
-        if (fetchedRole === "admin") {
-          router.push("/admin");
-          return;
-        }
-        if (fetchedRole === "organizer") {
-          router.push("/dashboard");
+        if (fetchedRole !== "facilitator" && fetchedRole !== "venue") {
+          // This page is facilitator/venue-only — everyone else belongs somewhere else.
+          router.push(destinationFor(fetchedRole) || "/setup-profile");
           return;
         }
         await loadNeeds();
@@ -64,6 +62,11 @@ export default function NetworkPage() {
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/login");
+  }
 
   async function handleRespond(needId, needOwnerId) {
     try {
@@ -89,6 +92,7 @@ export default function NetworkPage() {
       <p style={{ fontSize: 12, color: "#666" }}>
         Signed in as {user?.email} — role on file: {JSON.stringify(role)}
       </p>
+      <button onClick={handleLogout}>Log out</button>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <ul>
         {needs.map((n) => (
