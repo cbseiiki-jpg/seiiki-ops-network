@@ -68,7 +68,11 @@ export default function DashboardPage() {
       setUser(firebaseUser);
       try {
         const profileSnap = await getDoc(doc(db, "profiles", firebaseUser.uid));
-        const fetchedRole = profileSnap.exists() ? profileSnap.data().role : null;
+        if (!profileSnap.exists()) {
+          router.push("/setup-profile");
+          return;
+        }
+        const fetchedRole = profileSnap.data().role;
         setRole(fetchedRole);
         if (fetchedRole === "facilitator" || fetchedRole === "venue") {
           router.push("/network");

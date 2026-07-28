@@ -18,7 +18,11 @@ export default function LoginPage() {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const profileSnap = await getDoc(doc(db, "profiles", cred.user.uid));
-      const role = profileSnap.exists() ? profileSnap.data().role : null;
+      if (!profileSnap.exists()) {
+        router.push("/setup-profile");
+        return;
+      }
+      const role = profileSnap.data().role;
       if (role === "facilitator" || role === "venue") {
         router.push("/network");
       } else {
