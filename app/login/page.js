@@ -1,21 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { destinationFor } from "@/lib/roleRouting";
 
+const inputStyle =
+  "w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 placeholder-stone-600 focus:border-emerald-500 focus:outline-none";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
 
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const profileSnap = await getDoc(doc(db, "profiles", cred.user.uid));
@@ -27,18 +33,69 @@ export default function LoginPage() {
       router.push(destination || "/setup-profile");
     } catch (err) {
       setError(`Login failed: ${err.code || err.message}`);
+      setSubmitting(false);
     }
   }
 
   return (
-    <main style={{ padding: 40, maxWidth: 400 }}>
-      <h1>Seiiki Ops Network — Login</h1>
-      <form onSubmit={handleLogin}>
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required /><br /><br />
-        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required /><br /><br />
-        <button type="submit">Log in</button>
-      </form>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    <main className="flex-1 flex items-center justify-center px-6 py-12 fade-in">
+      <div className="w-full max-w-md glass-panel rounded-xl p-8">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-full bg-emerald-900 flex items-center justify-center border border-emerald-700/50 shrink-0">
+            <span className="text-emerald-400 font-serif font-bold text-xl">S</span>
+          </div>
+          <div>
+            <p className="font-serif text-lg text-stone-100 leading-tight">Seiiki Ops Network</p>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Operations Portal</p>
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-serif text-stone-100 mb-6">Log in</h1>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="field-label">Email</label>
+            <input
+              type="email"
+              className={inputStyle}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="field-label">Password</label>
+            <input
+              type="password"
+              className={inputStyle}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {submitting ? "Logging in..." : "Log in"}
+          </button>
+        </form>
+
+        {error && (
+          <p className="mt-4 text-sm text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg p-3">
+            {error}
+          </p>
+        )}
+
+        <p className="mt-6 text-xs text-stone-500">
+          Invited but no account yet?{" "}
+          <Link href="/signup" className="wikilink">
+            Use your invite link
+          </Link>
+          .
+        </p>
+      </div>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -8,6 +9,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  updateDoc,
   query,
   where,
   getDocs,
@@ -15,12 +17,44 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { normalizeRole, destinationFor } from "@/lib/roleRouting";
+import { PortalHeader, PortalFooter } from "@/components/PortalChrome";
+
+const inputStyle =
+  "w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 placeholder-stone-600 focus:border-emerald-500 focus:outline-none";
+const primaryButton =
+  "bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/retreats", label: "Retreats" },
+];
+
+// Organisation Snapshot + Relationship Notes fields, from Ops/Templates/Organizer Template.md.
+const ORG_FIELDS = [
+  { key: "status", label: "Status", placeholder: "Prospect / Active / Past / On Hold" },
+  { key: "location", label: "Location" },
+  { key: "main_contact", label: "Main contact" },
+  { key: "brand_identity", label: "Brand / Retreat identity" },
+  { key: "ideal_retreat_types", label: "Ideal retreat types" },
+  { key: "typical_audience", label: "Typical audience" },
+  { key: "budget_profile", label: "Budget profile" },
+  { key: "communication_channel", label: "Communication channel" },
+  { key: "last_contact", label: "Last contact" },
+];
+const RELATIONSHIP_FIELDS = [
+  { key: "trust_level", label: "Trust level" },
+  { key: "response_style", label: "Response style" },
+  { key: "decision_speed", label: "Decision speed" },
+  { key: "special_considerations", label: "Special considerations" },
+];
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState(null);
+  const [orgForm, setOrgForm] = useState({ name: "My Organization" });
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [orgSaved, setOrgSaved] = useState(false);
   const [retreats, setRetreats] = useState([]);
   const [myNeeds, setMyNeeds] = useState([]);
   const [responses, setResponses] = useState([]);
@@ -28,6 +62,10 @@ export default function DashboardPage() {
 
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
+  const [dates, setDates] = useState("");
+  const [capacity, setCapacity] = useState("");
+  const [theme, setTheme] = useState("");
+  const [audience, setAudience] = useState("");
 
   const [needRetreatId, setNeedRetreatId] = useState("");
   const [needType, setNeedType] = useState("facilitator");
@@ -42,9 +80,10 @@ export default function DashboardPage() {
     );
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const existingId = snap.docs[0].id;
-      setOrgId(existingId);
-      return existingId;
+      const found = snap.docs[0];
+      setOrgId(found.id);
+      setOrgForm({ name: "My Organization", ...found.data() });
+      return found.id;
     }
     const newOrg = await addDoc(collection(db, "organizations"), {
       name: "My Organization",
@@ -52,6 +91,7 @@ export default function DashboardPage() {
       created_at: serverTimestamp(),
     });
     setOrgId(newOrg.id);
+    setOrgForm({ name: "My Organization" });
     return newOrg.id;
   }
 
@@ -109,6 +149,23 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function updateOrgField(field, value) {
+    setOrgForm((prev) => ({ ...prev, [field]: value }));
+    setOrgSaved(false);
+  }
+
+  async function handleSaveOrgProfile(e) {
+    e.preventDefault();
+    setSavingOrg(true);
+    try {
+      await updateDoc(doc(db, "organizations", orgId), { ...orgForm });
+      setOrgSaved(true);
+    } catch (err) {
+      setError(`Could not save your organisation profile: ${err.code || err.message}`);
+    }
+    setSavingOrg(false);
+  }
+
   async function handleCreateRetreat(e) {
     e.preventDefault();
     try {
@@ -117,12 +174,20 @@ export default function DashboardPage() {
         owner_id: user.uid,
         title,
         location,
-        status: "planning",
+        dates,
+        capacity,
+        theme,
+        audience,
+        status: "Lead",
         visibility: "private",
         created_at: serverTimestamp(),
       });
       setTitle("");
       setLocation("");
+      setDates("");
+      setCapacity("");
+      setTheme("");
+      setAudience("");
       await loadRetreats(user.uid);
     } catch (err) {
       setError(`Could not create retreat: ${err.code || err.message}`);
@@ -157,69 +222,188 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  if (loading) return <p style={{ padding: 40 }}>Loading...</p>;
+  if (loading) {
+    return (
+      <main className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-stone-500">Loading...</p>
+      </main>
+    );
+  }
 
   return (
-    <main style={{ padding: 40 }}>
-      <h1>Organiser Dashboard</h1>
-      <p style={{ fontSize: 12, color: "#666" }}>
-        Signed in as {user?.email} — role on file: {JSON.stringify(role)}
-      </p>
-      <button onClick={handleLogout}>Log out</button>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    <>
+      <PortalHeader email={user?.email} navItems={NAV_ITEMS} activeHref="/dashboard" onLogout={handleLogout} />
+      <main className="flex-1 max-w-7xl mx-auto px-6 py-8 w-full fade-in space-y-8">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-2xl font-serif text-stone-100">Organiser Dashboard</h2>
+            <p className="text-stone-500 text-sm mt-1">
+              Manage your retreat vision. We handle the operational burden.
+            </p>
+          </div>
+          <p className="text-xs text-stone-600">
+            Signed in as {user?.email} — role on file: {JSON.stringify(role)}
+          </p>
+        </div>
 
-      <h2>Create a retreat</h2>
-      <form onSubmit={handleCreateRetreat}>
-        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required /><br /><br />
-        <input placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} /><br /><br />
-        <button type="submit">Add retreat</button>
-      </form>
+        {error && (
+          <p className="text-sm text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg p-3">
+            {error}
+          </p>
+        )}
 
-      <h2>Your retreats</h2>
-      <ul>
-        {retreats.map((r) => (
-          <li key={r.id}>{r.title} — {r.location} — {r.status}</li>
-        ))}
-      </ul>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Organisation snapshot + relationship notes */}
+          <div className="glass-panel rounded-xl p-6 lg:col-span-1 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-stone-800 flex items-center justify-center text-stone-400 font-serif text-xl shrink-0">
+                {(orgForm.name || "O")[0]}
+              </div>
+              <div>
+                <h3 className="font-medium text-stone-100">{orgForm.name || "My Organization"}</h3>
+                <p className="text-xs text-stone-500">Your organisation profile</p>
+              </div>
+            </div>
 
-      <h2>Post a need</h2>
-      <form onSubmit={handleCreateNeed}>
-        <select value={needRetreatId} onChange={(e) => setNeedRetreatId(e.target.value)} required>
-          <option value="">Select a retreat</option>
-          {retreats.map((r) => (
-            <option key={r.id} value={r.id}>{r.title}</option>
-          ))}
-        </select><br /><br />
-        <select value={needType} onChange={(e) => setNeedType(e.target.value)}>
-          <option value="facilitator">Facilitator</option>
-          <option value="venue">Venue</option>
-          <option value="visa">Visa guidance</option>
-          <option value="marketing">Marketing</option>
-          <option value="other">Other</option>
-        </select><br /><br />
-        <textarea placeholder="Describe what you need" value={needDescription} onChange={(e) => setNeedDescription(e.target.value)} required /><br /><br />
-        <button type="submit">Post need</button>
-      </form>
-
-      <h2>Your needs</h2>
-      <ul>
-        {myNeeds.length === 0 && <li>None posted yet.</li>}
-        {myNeeds.map((n) => (
-          <li key={n.id} style={{ marginBottom: 16 }}>
-            <strong>{n.type}</strong>: {n.description} — status: {n.status}
-            <ul>
-              {responsesFor(n.id).length === 0 && (
-                <li style={{ color: "#666" }}>No responses yet.</li>
-              )}
-              {responsesFor(n.id).map((r) => (
-                <li key={r.id}>
-                  {r.responder_name || r.responder_id}: {r.message}
-                </li>
+            <form onSubmit={handleSaveOrgProfile} className="space-y-3">
+              <div>
+                <label className="field-label">Organisation name</label>
+                <input
+                  className={inputStyle}
+                  value={orgForm.name || ""}
+                  onChange={(e) => updateOrgField("name", e.target.value)}
+                />
+              </div>
+              {ORG_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <label className="field-label">{f.label}</label>
+                  <input
+                    className={inputStyle}
+                    placeholder={f.placeholder}
+                    value={orgForm[f.key] || ""}
+                    onChange={(e) => updateOrgField(f.key, e.target.value)}
+                  />
+                </div>
               ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-    </main>
+
+              <div className="border-t border-white/10 pt-4">
+                <h4 className="text-sm font-medium text-stone-300 mb-3">Relationship notes</h4>
+                <div className="space-y-3">
+                  {RELATIONSHIP_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="field-label">{f.label}</label>
+                      <input
+                        className={inputStyle}
+                        value={orgForm[f.key] || ""}
+                        onChange={(e) => updateOrgField(f.key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button type="submit" disabled={savingOrg} className={`w-full ${primaryButton}`}>
+                {savingOrg ? "Saving..." : orgSaved ? "Saved" : "Save profile"}
+              </button>
+            </form>
+          </div>
+
+          {/* Retreats, needs, and responses */}
+          <div className="glass-panel rounded-xl p-6 lg:col-span-2 space-y-8">
+            <div>
+              <h3 className="font-serif text-lg text-stone-100 mb-4">Create a retreat</h3>
+              <form onSubmit={handleCreateRetreat} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input className={inputStyle} placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+                <input className={inputStyle} placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <input className={inputStyle} placeholder="Dates (e.g. Nov 12-18, 2026)" value={dates} onChange={(e) => setDates(e.target.value)} />
+                <input className={inputStyle} placeholder="Capacity" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+                <input className={inputStyle} placeholder="Theme" value={theme} onChange={(e) => setTheme(e.target.value)} />
+                <input className={inputStyle} placeholder="Audience" value={audience} onChange={(e) => setAudience(e.target.value)} />
+                <button type="submit" className={`${primaryButton} md:col-span-2`}>Add retreat</button>
+              </form>
+            </div>
+
+            <div>
+              <h3 className="font-serif text-lg text-stone-100 mb-4">Your retreats</h3>
+              <div className="space-y-2">
+                {retreats.length === 0 && <p className="text-sm text-stone-500">None yet.</p>}
+                {retreats.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/retreats?id=${r.id}`}
+                    className="glass-card rounded-lg p-4 flex items-center justify-between block hover:border-emerald-800/50"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-stone-200">{r.title}</p>
+                      <p className="text-xs text-stone-500">{r.location} {r.dates ? `• ${r.dates}` : ""}</p>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded bg-stone-800 text-stone-300 border border-stone-700">
+                      {r.status}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-serif text-lg text-stone-100 mb-4">Post a need</h3>
+              <form onSubmit={handleCreateNeed} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <select className={inputStyle} value={needRetreatId} onChange={(e) => setNeedRetreatId(e.target.value)} required>
+                  <option value="">Select a retreat</option>
+                  {retreats.map((r) => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+                <select className={inputStyle} value={needType} onChange={(e) => setNeedType(e.target.value)}>
+                  <option value="facilitator">Facilitator</option>
+                  <option value="venue">Venue</option>
+                  <option value="visa">Visa guidance</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="other">Other</option>
+                </select>
+                <textarea
+                  className={`${inputStyle} md:col-span-2`}
+                  placeholder="Describe what you need"
+                  value={needDescription}
+                  onChange={(e) => setNeedDescription(e.target.value)}
+                  required
+                />
+                <button type="submit" className={`${primaryButton} md:col-span-2`}>Post need</button>
+              </form>
+            </div>
+
+            <div>
+              <h3 className="font-serif text-lg text-stone-100 mb-4">Your needs</h3>
+              <div className="space-y-3">
+                {myNeeds.length === 0 && <p className="text-sm text-stone-500">None posted yet.</p>}
+                {myNeeds.map((n) => (
+                  <div key={n.id} className="glass-card rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-900/30 text-amber-400 border border-amber-800/50">
+                        {n.type}
+                      </span>
+                      <span className="text-xs text-stone-500">status: {n.status}</span>
+                    </div>
+                    <p className="text-sm text-stone-300 mb-2">{n.description}</p>
+                    <p className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Responses</p>
+                    {responsesFor(n.id).length === 0 && (
+                      <p className="text-xs text-stone-600">No responses yet.</p>
+                    )}
+                    <div className="space-y-1">
+                      {responsesFor(n.id).map((r) => (
+                        <p key={r.id} className="text-xs text-stone-400">
+                          <span className="text-stone-200">{r.responder_name || r.responder_id}:</span> {r.message}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+      <PortalFooter />
+    </>
   );
 }

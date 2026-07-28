@@ -7,6 +7,23 @@ import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firest
 import { auth, db } from "@/lib/firebase";
 import { destinationFor } from "@/lib/roleRouting";
 
+const inputStyle =
+  "w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 placeholder-stone-600 focus:border-emerald-500 focus:outline-none";
+
+function BrandMark() {
+  return (
+    <div className="flex items-center gap-3 mb-8">
+      <div className="w-10 h-10 rounded-full bg-emerald-900 flex items-center justify-center border border-emerald-700/50 shrink-0">
+        <span className="text-emerald-400 font-serif font-bold text-xl">S</span>
+      </div>
+      <div>
+        <p className="font-serif text-lg text-stone-100 leading-tight">Seiiki Ops Network</p>
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">Operations Portal</p>
+      </div>
+    </div>
+  );
+}
+
 export default function SignupPage() {
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
@@ -85,62 +102,97 @@ export default function SignupPage() {
 
   if (!invite) {
     return (
-      <main style={{ padding: 40, maxWidth: 400 }}>
-        <h1>Join Seiiki Ops Network</h1>
-        <p>Enter the invite code you were sent.</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            checkCode();
-          }}
-        >
-          <input
-            placeholder="Invite code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            required
-          /><br /><br />
-          <button type="submit" disabled={checking}>
-            {checking ? "Checking..." : "Continue"}
-          </button>
-        </form>
-        {codeError && <p style={{ color: "red" }}>{codeError}</p>}
+      <main className="flex-1 flex items-center justify-center px-6 py-12 fade-in">
+        <div className="w-full max-w-md glass-panel rounded-xl p-8">
+          <BrandMark />
+          <h1 className="text-2xl font-serif text-stone-100 mb-2">Join Seiiki Ops Network</h1>
+          <p className="text-sm text-stone-500 mb-6">Enter the invite code you were sent.</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              checkCode();
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="field-label">Invite code</label>
+              <input
+                className={inputStyle}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={checking}
+              className="w-full bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {checking ? "Checking..." : "Continue"}
+            </button>
+          </form>
+          {codeError && (
+            <p className="mt-4 text-sm text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg p-3">
+              {codeError}
+            </p>
+          )}
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 40, maxWidth: 400 }}>
-      <h1>Join Seiiki Ops Network</h1>
-      <p style={{ fontSize: 12, color: "#666" }}>
-        Invite verified — joining as {invite.role}.
-      </p>
-      <form onSubmit={handleSignup}>
-        <input
-          placeholder="Full name"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          required
-        /><br /><br />
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        /><br /><br />
-        <input
-          type="password"
-          placeholder="Password (at least 6 characters)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        /><br /><br />
-        <button type="submit" disabled={saving}>
-          {saving ? "Creating account..." : "Create account"}
-        </button>
-      </form>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    <main className="flex-1 flex items-center justify-center px-6 py-12 fade-in">
+      <div className="w-full max-w-md glass-panel rounded-xl p-8">
+        <BrandMark />
+        <h1 className="text-2xl font-serif text-stone-100 mb-2">Join Seiiki Ops Network</h1>
+        <p className="text-xs px-2 py-1 inline-block rounded-full bg-emerald-900/30 text-emerald-400 border border-emerald-800/50 mb-6">
+          Invite verified — joining as {invite.role}
+        </p>
+        <form onSubmit={handleSignup} className="space-y-4">
+          <div>
+            <label className="field-label">Full name</label>
+            <input
+              className={inputStyle}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="field-label">Email</label>
+            <input
+              type="email"
+              className={inputStyle}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="field-label">Password (at least 6 characters)</label>
+            <input
+              type="password"
+              className={inputStyle}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {saving ? "Creating account..." : "Create account"}
+          </button>
+        </form>
+        {error && (
+          <p className="mt-4 text-sm text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg p-3">
+            {error}
+          </p>
+        )}
+      </div>
     </main>
   );
 }
