@@ -15,6 +15,7 @@ const primaryButton =
   "bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 const NAV_ITEMS = [
   { href: "/admin", label: "Admin" },
+  { href: "/directory", label: "Directory" },
   { href: "/retreats", label: "Retreats" },
 ];
 

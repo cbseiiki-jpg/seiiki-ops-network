@@ -11,9 +11,10 @@ export function PortalHeader({ email, navItems = [], activeHref, onLogout }) {
     <header className="border-b border-white/10 bg-stone-950/80 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-emerald-900 flex items-center justify-center border border-emerald-700/50 shrink-0">
-            <span className="text-emerald-400 font-serif font-bold text-lg">S</span>
-          </div>
+          {/* Real brand mark from seiikiretreat.com (white variant, made
+              for dark backgrounds) — replaces the placeholder "S" badge. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/seiiki-logo.png" alt="Seiiki" className="h-9 w-9 object-contain shrink-0" />
           <div>
             <p className="font-serif text-xl text-stone-100 tracking-wide leading-tight">
               Seiiki Ops Network

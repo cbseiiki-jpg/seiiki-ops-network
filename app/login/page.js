@@ -41,9 +41,8 @@ export default function LoginPage() {
     <main className="flex-1 flex items-center justify-center px-6 py-12 fade-in">
       <div className="w-full max-w-md glass-panel rounded-xl p-8">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-full bg-emerald-900 flex items-center justify-center border border-emerald-700/50 shrink-0">
-            <span className="text-emerald-400 font-serif font-bold text-xl">S</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/seiiki-logo.png" alt="Seiiki" className="h-10 w-10 object-contain shrink-0" />
           <div>
             <p className="font-serif text-lg text-stone-100 leading-tight">Seiiki Ops Network</p>
             <p className="text-[10px] uppercase tracking-widest text-stone-500">Operations Portal</p>

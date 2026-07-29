@@ -13,18 +13,22 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 import { PortalHeader, PortalFooter } from "@/components/PortalChrome";
+import { PhotoField } from "@/components/PhotoField";
 
 const inputStyle =
   "w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 placeholder-stone-600 focus:border-emerald-500 focus:outline-none";
+const textareaStyle = `${inputStyle} min-h-[72px]`;
 const primaryButton =
   "bg-emerald-800 hover:bg-emerald-700 text-stone-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/directory", label: "Directory" },
   { href: "/retreats", label: "Retreats" },
 ];
 
@@ -102,22 +106,16 @@ export default function DashboardPage() {
     setRetreats(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 
-  async function loadMyNeeds(ownerUid) {
-    if (!ownerUid) return;
-    const q = query(collection(db, "needs"), where("owner_id", "==", ownerUid));
-    const snap = await getDocs(q);
-    setMyNeeds(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }
-
-  async function loadResponses(ownerUid) {
-    if (!ownerUid) return;
-    const q = query(collection(db, "need_responses"), where("need_owner_id", "==", ownerUid));
-    const snap = await getDocs(q);
-    setResponses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    // "Your needs" and its responses are live (onSnapshot) — a response
+    // from a facilitator/venue appears here the moment it's written,
+    // without reloading the page. Posting a new need also shows up on its
+    // own for the same reason, so there's no manual refresh call needed
+    // after handleCreateNeed anymore.
+    let unsubscribeNeeds = () => {};
+    let unsubscribeResponses = () => {};
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         router.push("/login");
         return;
@@ -138,14 +136,34 @@ export default function DashboardPage() {
         }
         await ensureOrganization(firebaseUser.uid);
         await loadRetreats(firebaseUser.uid);
-        await loadMyNeeds(firebaseUser.uid);
-        await loadResponses(firebaseUser.uid);
+
+        const needsQuery = query(collection(db, "needs"), where("owner_id", "==", firebaseUser.uid));
+        unsubscribeNeeds = onSnapshot(
+          needsQuery,
+          (snap) => setMyNeeds(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          (err) => setError(`Could not load your needs: ${err.code || err.message}`)
+        );
+
+        const responsesQuery = query(
+          collection(db, "need_responses"),
+          where("need_owner_id", "==", firebaseUser.uid)
+        );
+        unsubscribeResponses = onSnapshot(
+          responsesQuery,
+          (snap) => setResponses(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          (err) => setError(`Could not load responses: ${err.code || err.message}`)
+        );
       } catch (err) {
         setError(`Could not load your data: ${err.code || err.message}`);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeNeeds();
+      unsubscribeResponses();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -207,9 +225,19 @@ export default function DashboardPage() {
         created_at: serverTimestamp(),
       });
       setNeedDescription("");
-      await loadMyNeeds(user.uid);
+      // No manual reload — the live listener above adds it automatically.
     } catch (err) {
       setError(`Could not post need: ${err.code || err.message}`);
+    }
+  }
+
+  async function handleToggleNeedStatus(needId, currentStatus) {
+    const nextStatus = currentStatus === "open" ? "closed" : "open";
+    try {
+      await updateDoc(doc(db, "needs", needId), { status: nextStatus });
+      // No manual reload — the live listener above reflects it automatically.
+    } catch (err) {
+      setError(`Could not update need: ${err.code || err.message}`);
     }
   }
 
@@ -256,8 +284,13 @@ export default function DashboardPage() {
           {/* Organisation snapshot + relationship notes */}
           <div className="glass-panel rounded-xl p-6 lg:col-span-1 space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-stone-800 flex items-center justify-center text-stone-400 font-serif text-xl shrink-0">
-                {(orgForm.name || "O")[0]}
+              <div className="w-12 h-12 rounded-full bg-stone-800 overflow-hidden flex items-center justify-center text-stone-400 font-serif text-xl shrink-0">
+                {orgForm.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={orgForm.photo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  (orgForm.name || "O")[0]
+                )}
               </div>
               <div>
                 <h3 className="font-medium text-stone-100">{orgForm.name || "My Organization"}</h3>
@@ -266,6 +299,13 @@ export default function DashboardPage() {
             </div>
 
             <form onSubmit={handleSaveOrgProfile} className="space-y-3">
+              <PhotoField
+                label="Organisation photo / logo"
+                photoUrl={orgForm.photo_url}
+                storagePath={`org-photos/${user.uid}`}
+                onUploaded={(url) => updateOrgField("photo_url", url)}
+              />
+
               <div>
                 <label className="field-label">Organisation name</label>
                 <input
@@ -274,6 +314,38 @@ export default function DashboardPage() {
                   onChange={(e) => updateOrgField("name", e.target.value)}
                 />
               </div>
+
+              <div>
+                <label className="field-label">Bio</label>
+                <textarea
+                  className={textareaStyle}
+                  placeholder="A short introduction — shown on the Directory"
+                  value={orgForm.bio || ""}
+                  onChange={(e) => updateOrgField("bio", e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Social link</label>
+                  <input
+                    className={inputStyle}
+                    placeholder="Instagram, Facebook, etc."
+                    value={orgForm.social_link || ""}
+                    onChange={(e) => updateOrgField("social_link", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Website</label>
+                  <input
+                    className={inputStyle}
+                    placeholder="https://..."
+                    value={orgForm.website_link || ""}
+                    onChange={(e) => updateOrgField("website_link", e.target.value)}
+                  />
+                </div>
+              </div>
+
               {ORG_FIELDS.map((f) => (
                 <div key={f.key}>
                   <label className="field-label">{f.label}</label>
@@ -374,24 +446,35 @@ export default function DashboardPage() {
 
             <div>
               <h3 className="font-serif text-lg text-stone-100 mb-4">Your needs</h3>
+              <p className="text-xs text-stone-500 -mt-3 mb-4">
+                Live — new responses from the network appear here automatically.
+              </p>
               <div className="space-y-3">
                 {myNeeds.length === 0 && <p className="text-sm text-stone-500">None posted yet.</p>}
                 {myNeeds.map((n) => (
                   <div key={n.id} className="glass-card rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-900/30 text-amber-400 border border-amber-800/50">
                         {n.type}
                       </span>
                       <span className="text-xs text-stone-500">status: {n.status}</span>
+                      <button
+                        onClick={() => handleToggleNeedStatus(n.id, n.status)}
+                        className="text-xs text-stone-400 hover:text-stone-200 ml-auto cursor-pointer"
+                      >
+                        {n.status === "open" ? "Mark filled" : "Reopen"}
+                      </button>
                     </div>
-                    <p className="text-sm text-stone-300 mb-2">{n.description}</p>
-                    <p className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Responses</p>
+                    <p className="text-sm text-stone-300 mb-2 break-words">{n.description}</p>
+                    <p className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">
+                      Responses ({responsesFor(n.id).length})
+                    </p>
                     {responsesFor(n.id).length === 0 && (
                       <p className="text-xs text-stone-600">No responses yet.</p>
                     )}
                     <div className="space-y-1">
                       {responsesFor(n.id).map((r) => (
-                        <p key={r.id} className="text-xs text-stone-400">
+                        <p key={r.id} className="text-xs text-stone-400 break-words">
                           <span className="text-stone-200">{r.responder_name || r.responder_id}:</span> {r.message}
                         </p>
                       ))}

@@ -221,8 +221,16 @@ export default function RetreatsPage() {
 
   const navItems =
     role === "admin"
-      ? [{ href: "/admin", label: "Admin" }, { href: "/retreats", label: "Retreats" }]
-      : [{ href: "/dashboard", label: "Dashboard" }, { href: "/retreats", label: "Retreats" }];
+      ? [
+          { href: "/admin", label: "Admin" },
+          { href: "/directory", label: "Directory" },
+          { href: "/retreats", label: "Retreats" },
+        ]
+      : [
+          { href: "/dashboard", label: "Dashboard" },
+          { href: "/directory", label: "Directory" },
+          { href: "/retreats", label: "Retreats" },
+        ];
 
   return (
     <>
