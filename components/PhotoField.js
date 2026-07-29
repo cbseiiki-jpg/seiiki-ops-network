@@ -35,10 +35,10 @@ export function PhotoField({ label, photoUrl, storagePath, onUploaded, size = "w
           className={`${size} rounded-full bg-stone-800 border border-stone-700 overflow-hidden flex items-center justify-center shrink-0`}
         >
           {photoUrl ? (
-            // Plain <img>, not next/image — photo URLs come from Firebase
-            // Storage at upload time, an external host next/image would
-            // need explicitly allow-listing in next.config.mjs for no
-            // benefit here.
+            // Plain <img>, not next/image — photo URLs come from Cloudinary
+            // at upload time, an external host next/image would need
+            // explicitly allow-listing in next.config.mjs for no benefit
+            // here.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt="" className="w-full h-full object-cover" />
           ) : (
