@@ -7,6 +7,7 @@ import {
   collection,
   doc,
   getDoc,
+  setDoc,
   updateDoc,
   query,
   where,
@@ -18,6 +19,7 @@ import { auth, db } from "@/lib/firebase";
 import { normalizeRole, destinationFor } from "@/lib/roleRouting";
 import { PortalHeader, PortalFooter } from "@/components/PortalChrome";
 import { PhotoField } from "@/components/PhotoField";
+import { PUBLIC_PROFILE_FIELDS } from "@/lib/publicProfileFields";
 
 const inputStyle =
   "w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 placeholder-stone-600 focus:border-emerald-500 focus:outline-none";
@@ -103,6 +105,7 @@ export default function NetworkPage() {
   const [needs, setNeeds] = useState([]);
   const [myResponses, setMyResponses] = useState([]);
   const [respondingTo, setRespondingTo] = useState(null);
+  const [accessRequests, setAccessRequests] = useState([]);
   const [profileForm, setProfileForm] = useState({ full_name: "" });
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -117,6 +120,7 @@ export default function NetworkPage() {
     // went through.
     let unsubscribeNeeds = () => {};
     let unsubscribeMyResponses = () => {};
+    let unsubscribeAccessRequests = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -163,6 +167,19 @@ export default function NetworkPage() {
           (snap) => setMyResponses(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
           () => {} // non-critical — fail silently, button just stays active
         );
+
+        // Incoming requests from other members asking to see your private
+        // Snapshot/Operational/Text fields — see the Firestore rule note in
+        // the Decision doc for why those fields are private by default now.
+        const accessRequestsQuery = query(
+          collection(db, "profile_access_requests"),
+          where("profile_uid", "==", firebaseUser.uid)
+        );
+        unsubscribeAccessRequests = onSnapshot(
+          accessRequestsQuery,
+          (snap) => setAccessRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          (err) => setError(`Could not load access requests: ${err.code || err.message}`)
+        );
       } catch (err) {
         setError(`Could not load needs: ${err.code || err.message}`);
       }
@@ -173,6 +190,7 @@ export default function NetworkPage() {
       unsubscribeAuth();
       unsubscribeNeeds();
       unsubscribeMyResponses();
+      unsubscribeAccessRequests();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -209,11 +227,28 @@ export default function NetworkPage() {
     setSavingProfile(true);
     try {
       await updateDoc(doc(db, "profiles", user.uid), { ...profileForm });
+      // Mirror only the Directory-safe subset into public_profiles — this is
+      // what makes the Snapshot/Operational/Text fields above private by
+      // default. See lib/publicProfileFields.js.
+      const publicSubset = {};
+      PUBLIC_PROFILE_FIELDS.forEach((key) => {
+        if (profileForm[key] !== undefined) publicSubset[key] = profileForm[key];
+      });
+      await setDoc(doc(db, "public_profiles", user.uid), publicSubset);
       setProfileSaved(true);
     } catch (err) {
       setError(`Could not save your profile: ${err.code || err.message}`);
     }
     setSavingProfile(false);
+  }
+
+  async function handleRequestDecision(requestId, decision) {
+    try {
+      await updateDoc(doc(db, "profile_access_requests", requestId), { status: decision });
+      // No manual reload — the live listener above reflects it automatically.
+    } catch (err) {
+      setError(`Could not update that request: ${err.code || err.message}`);
+    }
   }
 
   async function handleLogout() {
@@ -256,6 +291,8 @@ export default function NetworkPage() {
   const isVenue = role === "venue";
   const snapshotFields = isVenue ? VENUE_SNAPSHOT : FACILITATOR_SNAPSHOT;
   const textFields = isVenue ? VENUE_TEXT : FACILITATOR_TEXT;
+
+  const pendingAccessRequests = accessRequests.filter((r) => r.status === "pending");
 
   // Viewer's own need-type first, so it's the first thing they see.
   const orderedTypes = [role, ...NEED_TYPE_ORDER.filter((t) => t !== role)];
@@ -485,6 +522,40 @@ export default function NetworkPage() {
                 {savingProfile ? "Saving..." : profileSaved ? "Saved" : "Save profile"}
               </button>
             </form>
+
+            <div className="border-t border-white/10 pt-4">
+              <h4 className="text-sm font-medium text-stone-300 mb-1">Access requests</h4>
+              <p className="text-xs text-stone-500 mb-3">
+                Your Snapshot, Operational, and other internal notes are private by default — only
+                you and admin see them. Other members can ask to see them; approve or deny below.
+              </p>
+              {pendingAccessRequests.length === 0 && (
+                <p className="text-xs text-stone-600">No pending requests.</p>
+              )}
+              <div className="space-y-2">
+                {pendingAccessRequests.map((r) => (
+                  <div key={r.id} className="glass-card rounded-lg p-3 flex items-center justify-between gap-2">
+                    <span className="text-xs text-stone-300 min-w-0 break-words">
+                      {r.requester_name || r.requester_id} wants to see your internal notes
+                    </span>
+                    <div className="flex gap-3 shrink-0">
+                      <button
+                        onClick={() => handleRequestDecision(r.id, "approved")}
+                        className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleRequestDecision(r.id, "denied")}
+                        className="text-xs text-red-400 hover:text-red-300 cursor-pointer"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Open needs board — grouped by type, live */}
